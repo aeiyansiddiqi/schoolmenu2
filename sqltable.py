@@ -1,5 +1,6 @@
 import re
 import sqlite3
+import requests
 
 # Function to read the menu from a text file
 def read_menu_from_file(filename):
@@ -16,12 +17,8 @@ def extract_menu(day: str):
     items = re.search(pattern, menu_text, re.DOTALL)
 
     if items:
-        # Extract the menu items for the day
         menu = items.group(0).strip()
-        
-        # Split by line and remove leading dash for each item
         day_menu = [item[1:].strip() for item in menu.splitlines() if item.startswith("-")]
-        
         return day_menu
     else:
         return None
@@ -31,8 +28,6 @@ days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sun
 
 # Dictionary to hold menus for each day
 week_menus = {}
-
-# Extract menus for each day
 for day in days:
     week_menus[day] = extract_menu(day)
 
@@ -40,13 +35,14 @@ for day in days:
 conn = sqlite3.connect('weekly_menu.db')
 cursor = conn.cursor()
 
-# Create table for menu items
+# Create table for menu items with image_url column
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS menu (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         day TEXT,
         meal_time TEXT,
-        item TEXT
+        item TEXT,
+        image_url TEXT
     )
 ''')
 
@@ -59,20 +55,19 @@ def classify_meal_time(item_text):
     elif "dinner" in item_text.lower():
         return "Dinner"
     else:
-        return "Braekfast"
+        return "Breakfast"
 
 # Insert menu items into the table
 for day, menu_items in week_menus.items():
     if menu_items:
         meal_time = "Breakfast"  # Default meal time
         for item in menu_items:
-            # Check for meal time labels
             if "Lunch" in item:
                 meal_time = "Lunch"
-                continue  # Skip "Lunch" label itself
+                continue
             elif "Dinner" in item:
                 meal_time = "Dinner"
-                continue  # Skip "Dinner" label itself
+                continue
 
             # Insert each item with the current meal time
             cursor.execute('''
@@ -80,8 +75,40 @@ for day, menu_items in week_menus.items():
                 VALUES (?, ?, ?)
             ''', (day, meal_time, item))
 
+# Commit changes before adding image URLs
+conn.commit()
+
+# Function to get the first image URL for a query
+def get_first_image_url(query):
+    api_key = "AIzaSyBW5TrzHrydzuH71BaXnVsbq4DDbOGsUso"
+    search_engine_id = "92b043485a77d44ea"
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": api_key,
+        "cx": search_engine_id,
+        "q": query,
+        "searchType": "image",
+        "num": 1
+    }
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    if "items" in data:
+        return data["items"][0]["link"]
+    else:
+        return None
+
+# Update menu items with image URLs based on item name
+cursor.execute("SELECT id, item FROM menu WHERE image_url IS NULL;")
+items = cursor.fetchall()
+for item_id, item_name in items:
+    image_url = get_first_image_url(item_name)
+    if image_url:
+        cursor.execute("UPDATE menu SET image_url = ? WHERE id = ?;", (image_url, item_id))
+        print(f"Updated {item_name} with image URL.")
+
 # Commit changes and close the connection
 conn.commit()
 conn.close()
 
-print("Menu data has been stored in the database.")
+print("Menu data has been stored in the database with image URLs.")
