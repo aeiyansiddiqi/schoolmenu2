@@ -80,8 +80,8 @@ conn.commit()
 
 # Function to get the first image URL for a query
 def get_first_image_url(query):
-    api_key = "AIzaSyBW5TrzHrydzuH71BaXnVsbq4DDbOGsUso"
-    search_engine_id = "92b043485a77d44ea"
+    api_key = "API KEY"
+    search_engine_id = "API KEY"
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
         "key": api_key,
